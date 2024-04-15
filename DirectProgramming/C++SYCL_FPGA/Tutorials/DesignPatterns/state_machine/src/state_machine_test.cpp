@@ -4,46 +4,46 @@
 #include "state_machine.hpp"
 
 template <typename StreamIn>
-bool populateStream(sycl::queue q, size_t len, float *testData,
-                    float *testDataExpected, float testCoeff) {
+bool PopulateStream(sycl::queue q, size_t len, float *test_data,
+                    float *test_data_expected, float test_coeff) {
   for (int i = 0; i < len; i++) {
-    testDataExpected[i] = testData[i] * testCoeff;
-    MyStreamingBeat testBeat;
-    testBeat.sop = (i == 0);
-    testBeat.eop = (i == (len - 1));
-    testBeat.data = testData[i];
-    StreamIn::write(q, testBeat);
+    test_data_expected[i] = test_data[i] * test_coeff;
+    MyStreamingBeat test_beat;
+    test_beat.sop = (i == 0);
+    test_beat.eop = (i == (len - 1));
+    test_beat.data = test_data[i];
+    StreamIn::write(q, test_beat);
   }
   return true;
 }
 
 template <typename StreamOut>
-bool checkOutput(sycl::queue q, size_t len, float *testDataExpected,
-                 float *testDataCalc) {
-  std::cout << "capture and check output..." << std::endl;
+bool CheckOutput(sycl::queue q, size_t len, float *test_data_expected,
+                 float *test_data_calc) {
+  std::cout << "Capture and check output..." << std::endl;
   bool passed = true;
   for (int i = 0; i < len; i++) {
-    bool didRead = true;
-    MyStreamingBeat testBeat = StreamOut::read(q);
-    if (!didRead) {
+    bool did_read = true;
+    MyStreamingBeat test_beat = StreamOut::read(q);
+    if (!did_read) {
       std::cerr << "ERROR: could not read sample " << i << std::endl;
       return false;
     }
 
-    testDataCalc[i] = testBeat.data;
+    test_data_calc[i] = test_beat.data;
 
-    bool firstBeat = (i == 0);
-    bool lastBeat = (i == (len - 1));
+    bool first_beat = (i == 0);
+    bool last_beat = (i == (len - 1));
     // check for failures
-    if (firstBeat != testBeat.sop) {
+    if (first_beat != test_beat.sop) {
       std::cerr << "ERROR: SOP mismatch [" << i << "]" << std::endl;
       passed = false;
     }
-    if (lastBeat != testBeat.eop) {
+    if (last_beat != test_beat.eop) {
       std::cerr << "ERROR: EOP mismatch [" << i << "]" << std::endl;
       passed = false;
     }
-    if (testDataCalc[i] != testDataExpected[i]) {
+    if (test_data_calc[i] != test_data_expected[i]) {
       std::cerr << "ERROR: data mismatch [" << i << "]" << std::endl;
       passed = false;
     }
@@ -51,8 +51,6 @@ bool checkOutput(sycl::queue q, size_t len, float *testDataExpected,
   return passed;
 }
 
-#define _USE_MATH_DEFINES
-#include <math.h>
 #if FPGA_SIMULATOR
 constexpr int kInputSize = 5;
 #else
@@ -96,53 +94,56 @@ int main() {
               << std::endl;
 
     // create test data
-    float *testData = new float[kInputSize];
-    float coeff_ProperStateMachine = 0.95f;
-    float coeff_NaiveStateMachine = 1.95f;
-    float *testDataExpected_NaiveStateMachine = new float[kInputSize];
-    float *testDataExpected_ProperStateMachine = new float[kInputSize];
-    float *testDataCalc = new float[kInputSize];
+    float *test_data = new float[kInputSize];
+    float coeff_optimized = 0.95f;
+    float coeff_naive = 1.95f;
+    float *test_data_expected_naive = new float[kInputSize];
+    float *test_data_expected_optimized = new float[kInputSize];
+    float *test_data_calc = new float[kInputSize];
     for (int i = 0; i < kInputSize; i++) {
-      testData[i] = i;
+      test_data[i] = i;
     }
 
-    int *iterationCountShared = sycl::malloc_shared<int>(1, q);
+    // Allocate shared memory for an integer.
+    int *iteration_count_shared = sycl::malloc_shared<int>(1, q);
+    float *coeff_shared = sycl::malloc_shared<float>(1, q);
 
-    populateStream<StreamIn_ProperStateMachine>(q, kInputSize, testData, testDataExpected_ProperStateMachine,
-                             coeff_ProperStateMachine);
-    float *coeffShared = sycl::malloc_shared<float>(1, q);
-    coeffShared[0] = coeff_ProperStateMachine;
-    // TODO: add performance comparison
-    std::cout << "Test for proper implementation of the state machine:" << std::endl;
-    std::cout << "initialize coeff = " << coeffShared[0] << "... " << std::endl;
-    std::cout << "Process a vector of size " << kInputSize << std::endl;
-    q.single_task<IDProperStateMachine>(ProperStateMachine{
-      coeffShared, iterationCountShared, true, (kIterations)
-      }).wait();
-    passed &=
-        checkOutput<StreamOut_ProperStateMachine>(q, kInputSize, testDataExpected_ProperStateMachine, testDataCalc);
-
-    std::cout << (passed ? "PASSED" : "FAILED") << std::endl;
-
-    populateStream<StreamIn_NaiveStateMachine>(q, kInputSize, testData, testDataExpected_NaiveStateMachine,
-                             coeff_NaiveStateMachine);
-    coeffShared[0] = coeff_NaiveStateMachine;
+    // Test for naive implementation.
+    PopulateStream<StreamIn_NaiveStateMachine>(q, kInputSize, test_data, test_data_expected_naive,
+                             coeff_naive);
+    coeff_shared[0] = coeff_naive;
     std::cout << "\nTest for naive implementation of the state machine:" << std::endl;
-    std::cout << "initialize coeff = " << coeffShared[0] << "... " << std::endl;
+    std::cout << "initialize coeff = " << coeff_shared[0] << "... " << std::endl;
     std::cout << "Process a vector of size " << kInputSize << std::endl;
-    *iterationCountShared = 0;
+    *iteration_count_shared = 0;
     q.single_task<IDNaiveStateMachine>(NaiveStateMachine{
-      coeffShared, iterationCountShared, true, (kIterations)
+      coeff_shared, iteration_count_shared, true, (kIterations)
       }).wait();
     passed &=
-        checkOutput<StreamOut_NaiveStateMachine>(q, kInputSize, testDataExpected_NaiveStateMachine, testDataCalc);
+        CheckOutput<StreamOut_NaiveStateMachine>(q, kInputSize, test_data_expected_naive, test_data_calc);
     std::cout << (passed ? "PASSED" : "FAILED") << std::endl;
     
-    sycl::free(coeffShared, q);
-    delete[] testData;
-    delete[] testDataCalc;
-    delete[] testDataExpected_ProperStateMachine;
-    delete[] testDataExpected_NaiveStateMachine;
+    // Test for optimized implementation.
+    PopulateStream<StreamIn_OptimizedStateMachine>(q, kInputSize, test_data, test_data_expected_optimized,
+                             coeff_optimized);
+    coeff_shared[0] = coeff_optimized;
+    std::cout << "Test for optimized implementation of the state machine:" << std::endl;
+    std::cout << "initialize coeff = " << coeff_shared[0] << "... " << std::endl;
+    std::cout << "Process a vector of size " << kInputSize << std::endl;
+    q.single_task<IDOptimizedStateMachine>(OptimizedStateMachine{
+      coeff_shared, iteration_count_shared, true, (kIterations)
+      }).wait();
+    passed &=
+        CheckOutput<StreamOut_OptimizedStateMachine>(q, kInputSize, test_data_expected_optimized, test_data_calc);
+    std::cout << (passed ? "PASSED" : "FAILED") << std::endl;
+
+    // TODO: add performance comparison
+
+    sycl::free(coeff_shared, q);
+    delete[] test_data;
+    delete[] test_data_calc;
+    delete[] test_data_expected_optimized;
+    delete[] test_data_expected_naive;
   } catch (sycl::exception const &e) {
     // Catches exceptions in the host code.
     std::cerr << "Caught a SYCL host exception:\n" << e.what() << "\n";
