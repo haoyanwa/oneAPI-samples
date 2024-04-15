@@ -98,6 +98,7 @@ flowchart LR
 | [pipes](Tutorials/Features/pipes)                                                                                             | [Tutorials/Features](Tutorials/Features)                                                 | The basics of using SYCL*-compliant pipes extension for FPGA <br> How to declare and use pipes
 | [printf](Tutorials/Features/printf)                                                                                           | [Tutorials/DesignPatterns](Tutorials/DesignPatterns)                                     | How to declare and use `printf` in program
 | [invocation_interfaces](Tutorials/Features/hls_flow_interfaces/invocation_interfaces)                                     | [Tutorials/Features/hls_flow_interfaces](Tutorials/Features/hls_flow_interfaces) | How to specify the kernel invocation interface and kernel argument interfaces
+| [state_machine](Tutorials/DesignPatterns/state_machine/) | [Tutorials/DesignPatterns](Tutorials/DesignPatterns) | How to make an efficient state machine design with the oneAPI FPGA compiler.
 | [streaming_data_interfaces](Tutorials/Features/hls_flow_interfaces/streaming_data_interfaces)                             | [Tutorials/Features/hls_flow_interfaces](Tutorials/Features/hls_flow_interfaces) | How to use pipes to implement streaming data interfaces on an IP component
 
 
